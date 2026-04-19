@@ -30,10 +30,6 @@ LANG_DATA = {}  # Stores language-grouped files per message: key -> {search, all
 
 
 def build_search_ui(key, req, offset=0):
-    """
-    Core UI Builder for the Advanced Dual-Filter Search Module.
-    Handles intersection filters (Language + Season), dynamic grid buttons, Send All, and Pagination.
-    """
     data = LANG_DATA.get(key)
     if not data:
         return None, 0
@@ -47,7 +43,6 @@ def build_search_ui(key, req, offset=0):
     all_files = data.get('all_files', [])
     search = data.get('search', '')
 
-    # ── 1. Apply Intersecting Filters ──
     display_files = all_files.copy()
 
     if active_lang and active_lang in lang_groups:
@@ -72,14 +67,11 @@ def build_search_ui(key, req, offset=0):
     total = len(display_files)
     page_files = display_files[offset:offset + 10]
 
-    # ── 2. Build Buttons ──
     btn = []
 
-    # SEND ALL Button (Only for Series!)
     if total > 0 and all_seasons:
         btn.append([InlineKeyboardButton("📥 SEND ALL 📥", callback_data=f"sendall_{req}_{key}_{offset}")])
 
-    # Languages Grid
     if lang_groups:
         lang_btns = []
         for lang_label, lang_files in lang_groups.items():
@@ -90,7 +82,6 @@ def build_search_ui(key, req, offset=0):
         for i in range(0, len(lang_btns), 3):
             btn.append(lang_btns[i:i + 3])
 
-    # Seasons Grid
     if all_seasons:
         season_btns = []
         for s_label in all_seasons:
@@ -101,7 +92,6 @@ def build_search_ui(key, req, offset=0):
         for i in range(0, len(season_btns), 4):
             btn.append(season_btns[i:i + 4])
 
-    # Quality Grid
     if all_qualities:
         qual_btns = []
         for q_label in all_qualities:
@@ -112,7 +102,6 @@ def build_search_ui(key, req, offset=0):
         for i in range(0, len(qual_btns), 3):
             btn.append(qual_btns[i:i + 3])
 
-    # File Buttons
     for file in page_files:
         btn.append([
             InlineKeyboardButton(
@@ -121,7 +110,6 @@ def build_search_ui(key, req, offset=0):
             )
         ])
 
-    # Pagination Grid
     if total > 0:
         n_offset = offset + 10 if offset + 10 < total else 0
         off_set = 0 if 0 < offset <= 10 else (None if offset == 0 else offset - 10)
@@ -155,14 +143,12 @@ def build_search_ui(key, req, offset=0):
 @Client.on_message((filters.group | filters.private) & filters.text & filters.incoming)
 async def give_filter(client, message):
     k = await manual_filters(client, message)
-
     if k == False:
         await auto_filter(client, message)
 
 
 @Client.on_callback_query(filters.regex(r"^next_"))
 async def next_page(bot, query):
-    """Handle pagination strictly passing offset to builder."""
     ident, req, key, offset = query.data.split("_")
     if int(req) not in [query.from_user.id, 0]:
         return await query.answer("You cannot interact with this menu.", show_alert=True)
@@ -186,20 +172,15 @@ async def next_page(bot, query):
 
 @Client.on_callback_query(filters.regex(r"^lang_"))
 async def lang_filter(bot, query):
-    """Handle language filter button clicks."""
     _, key, selected_lang = query.data.split("_", 2)
-
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
-
     req = query.from_user.id
-
     if selected_lang == "ALL" or selected_lang == data.get('active_lang'):
         data['active_lang'] = None
     else:
         data['active_lang'] = selected_lang
-
     btn, total = build_search_ui(key, req, offset=0)
     if btn:
         try:
@@ -213,20 +194,15 @@ async def lang_filter(bot, query):
 
 @Client.on_callback_query(filters.regex(r"^season_"))
 async def season_filter(bot, query):
-    """Handle season filter button clicks."""
     _, key, selected_season = query.data.split("_", 2)
-
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
-
     req = query.from_user.id
-
     if selected_season == "ALL" or selected_season == data.get('active_season'):
         data['active_season'] = None
     else:
         data['active_season'] = selected_season
-
     btn, total = build_search_ui(key, req, offset=0)
     if btn:
         try:
@@ -240,20 +216,15 @@ async def season_filter(bot, query):
 
 @Client.on_callback_query(filters.regex(r"^qual_"))
 async def quality_filter(bot, query):
-    """Handle quality filter button clicks."""
     _, key, selected_quality = query.data.split("_", 2)
-
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
-
     req = query.from_user.id
-
     if selected_quality == "ALL" or selected_quality == data.get('active_quality'):
         data['active_quality'] = None
     else:
         data['active_quality'] = selected_quality
-
     btn, total = build_search_ui(key, req, offset=0)
     if btn:
         try:
@@ -267,19 +238,12 @@ async def quality_filter(bot, query):
 
 @Client.on_callback_query(filters.regex(r"^sendall_"))
 async def send_all_files(bot, query):
-    """
-    Handle the SEND ALL button.
-    Redirects to PM with Deep-Link to trigger ForceSub join request logic.
-    """
     _, req, key, offset = query.data.split("_")
-
     if int(req) not in [query.from_user.id, 0]:
         return await query.answer("You cannot interact with this menu.", show_alert=True)
-
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
-
     await query.answer(url=f"https://t.me/{temp.U_NAME}?start=all_batch_{key}_{offset}")
 
 
@@ -289,16 +253,23 @@ async def cb_handler(client: Client, query: CallbackQuery):
         await query.message.delete()
 
     elif query.data == "howtouse":
-        # ── How To Use page ──
-        buttons = [[
-            InlineKeyboardButton('🏠 Home', callback_data='start')
-        ]]
+        # ── FIXED: use reply_text as fallback if edit fails (e.g. message has photo) ──
+        buttons = [[InlineKeyboardButton('🏠 Home', callback_data='start')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.HOW_TO_USE_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await query.message.edit_text(
+                text=script.HOW_TO_USE_TXT,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
+        except Exception:
+            await query.message.reply_text(
+                text=script.HOW_TO_USE_TXT,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
         return await query.answer('Done')
 
     elif query.data == "delallconfirm":
@@ -325,7 +296,6 @@ async def cb_handler(client: Client, query: CallbackQuery):
         elif chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
             grp_id = query.message.chat.id
             title = query.message.chat.title
-
         else:
             return await query.answer('Done')
 
@@ -338,11 +308,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data == "delallcancel":
         userid = query.from_user.id
         chat_type = query.message.chat.type
-
         if chat_type == enums.ChatType.PRIVATE:
             await query.message.reply_to_message.delete()
             await query.message.delete()
-
         elif chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
             grp_id = query.message.chat.id
             st = await client.get_chat_member(grp_id, userid)
@@ -362,14 +330,12 @@ async def cb_handler(client: Client, query: CallbackQuery):
         hr = await client.get_chat(int(group_id))
         title = hr.title
         user_id = query.from_user.id
-
         if act == "":
             stat = "CONNECT"
             cb = "connectcb"
         else:
             stat = "DISCONNECT"
             cb = "disconnect"
-
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(f"{stat}", callback_data=f"{cb}:{group_id}"),
              InlineKeyboardButton("DELETE", callback_data=f"deletecb:{group_id}")],
@@ -389,12 +355,8 @@ async def cb_handler(client: Client, query: CallbackQuery):
         title = hr.title
         user_id = query.from_user.id
         mkact = await make_active(str(user_id), str(group_id))
-
         if mkact:
-            await query.message.edit_text(
-                f"Connected to **{title}**",
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
+            await query.message.edit_text(f"Connected to **{title}**", parse_mode=enums.ParseMode.MARKDOWN)
         else:
             await query.message.edit_text('Some error occurred!!', parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
@@ -406,17 +368,10 @@ async def cb_handler(client: Client, query: CallbackQuery):
         title = hr.title
         user_id = query.from_user.id
         mkinact = await make_inactive(str(user_id))
-
         if mkinact:
-            await query.message.edit_text(
-                f"Disconnected from **{title}**",
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
+            await query.message.edit_text(f"Disconnected from **{title}**", parse_mode=enums.ParseMode.MARKDOWN)
         else:
-            await query.message.edit_text(
-                f"Some error occurred!!",
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
+            await query.message.edit_text(f"Some error occurred!!", parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
 
     elif "deletecb" in query.data:
@@ -424,14 +379,10 @@ async def cb_handler(client: Client, query: CallbackQuery):
         user_id = query.from_user.id
         group_id = query.data.split(":")[1]
         delcon = await delete_connection(str(user_id), str(group_id))
-
         if delcon:
             await query.message.edit_text("Successfully deleted connection")
         else:
-            await query.message.edit_text(
-                f"Some error occurred!!",
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
+            await query.message.edit_text(f"Some error occurred!!", parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
 
     elif query.data == "backcb":
@@ -439,9 +390,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         userid = query.from_user.id
         groupids = await all_connections(str(userid))
         if groupids is None:
-            await query.message.edit_text(
-                "There are no active connections!! Connect to some groups first.",
-            )
+            await query.message.edit_text("There are no active connections!! Connect to some groups first.")
             return await query.answer('Done')
         buttons = []
         for groupid in groupids:
@@ -450,20 +399,11 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 title = ttl.title
                 active = await if_active(str(userid), str(groupid))
                 act = " - ACTIVE" if active else ""
-                buttons.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"{title}{act}", callback_data=f"groupcb:{groupid}:{act}"
-                        )
-                    ]
-                )
+                buttons.append([InlineKeyboardButton(text=f"{title}{act}", callback_data=f"groupcb:{groupid}:{act}")])
             except:
                 pass
         if buttons:
-            await query.message.edit_text(
-                "Your connected group details ;\n\n",
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
+            await query.message.edit_text("Your connected group details ;\n\n", reply_markup=InlineKeyboardMarkup(buttons))
 
     elif "alertmessage" in query.data:
         grp_id = query.message.chat.id
@@ -487,28 +427,22 @@ async def cb_handler(client: Client, query: CallbackQuery):
         f_caption = files.caption
         if CUSTOM_FILE_CAPTION:
             try:
-                f_caption = CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                       file_size='' if size is None else size,
-                                                       file_caption='' if f_caption is None else f_caption)
+                f_caption = CUSTOM_FILE_CAPTION.format(
+                    file_name='' if title is None else title,
+                    file_size='' if size is None else size,
+                    file_caption='' if f_caption is None else f_caption
+                )
             except Exception as e:
                 logger.exception(e)
-            f_caption = f_caption
         if f_caption is None:
             f_caption = f"{files.file_name}"
-
         try:
-            if AUTH_CHANNEL and not await is_subscribed(client, query):
-                await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-                return
-            else:
-                await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-                return
+            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
         except UserIsBlocked:
             await query.answer('Unblock the bot mahn !', show_alert=True)
-        except PeerIdInvalid:
+        except Exception:
             await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-        except Exception as e:
-            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+        return
 
     elif query.data.startswith("checksub"):
         if AUTH_CHANNEL and not await is_subscribed(client, query):
@@ -524,12 +458,13 @@ async def cb_handler(client: Client, query: CallbackQuery):
         f_caption = files.caption
         if CUSTOM_FILE_CAPTION:
             try:
-                f_caption = CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                       file_size='' if size is None else size,
-                                                       file_caption='' if f_caption is None else f_caption)
+                f_caption = CUSTOM_FILE_CAPTION.format(
+                    file_name='' if title is None else title,
+                    file_size='' if size is None else size,
+                    file_caption='' if f_caption is None else f_caption
+                )
             except Exception as e:
                 logger.exception(e)
-                f_caption = f_caption
         if f_caption is None:
             f_caption = f"{title}"
         await query.answer()
@@ -539,152 +474,92 @@ async def cb_handler(client: Client, query: CallbackQuery):
             caption=f_caption,
             protect_content=True if ident == 'checksubp' else False
         )
+        return
 
     elif query.data == "pages":
         await query.answer()
+        return
 
     elif query.data == "start":
-        # ── Updated Start Buttons matching screenshot ──
         buttons = [
-            [
-                InlineKeyboardButton(
-                    '➕ Add Me As Admin 👉 Groups ➕',
-                    url=f'http://t.me/{temp.U_NAME}?startgroup=true'
-                )
-            ],
+            [InlineKeyboardButton('➕ Add Me As Admin 👉 Groups ➕', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
             [
                 InlineKeyboardButton('🎬 Movie Search...', url='https://t.me/+AngJ8lGmH4wwNWY1'),
                 InlineKeyboardButton('📢 Movie Updates', url='https://t.me/ccllinks')
             ],
-            [
-                InlineKeyboardButton('📖 How to Use', callback_data='howtouse')
-            ]
+            [InlineKeyboardButton('📖 How to Use', callback_data='howtouse')]
         ]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.START_TXT.format(query.from_user.mention, temp.U_NAME, temp.B_NAME),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
-        await query.answer('Done')
+        try:
+            await query.message.edit_text(
+                text=script.START_TXT.format(query.from_user.mention, temp.U_NAME, temp.B_NAME),
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
+        except Exception:
+            await query.message.reply_text(
+                text=script.START_TXT.format(query.from_user.mention, temp.U_NAME, temp.B_NAME),
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
+        return await query.answer('Done')
 
     elif query.data == "help":
-        buttons = [[
-            InlineKeyboardButton('Manual Filter', callback_data='manuelfilter'),
-            InlineKeyboardButton('Auto Filter', callback_data='autofilter')
-        ], [
-            InlineKeyboardButton('Connection', callback_data='coct'),
-            InlineKeyboardButton('Extra Mods', callback_data='extra')
-        ], [
-            InlineKeyboardButton('🏠 Home', callback_data='start'),
-            InlineKeyboardButton('🔮 Status', callback_data='stats')
-        ]]
+        buttons = [
+            [InlineKeyboardButton('Manual Filter', callback_data='manuelfilter'), InlineKeyboardButton('Auto Filter', callback_data='autofilter')],
+            [InlineKeyboardButton('Connection', callback_data='coct'), InlineKeyboardButton('Extra Mods', callback_data='extra')],
+            [InlineKeyboardButton('🏠 Home', callback_data='start'), InlineKeyboardButton('🔮 Status', callback_data='stats')]
+        ]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.HELP_TXT.format(query.from_user.mention),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.HELP_TXT.format(query.from_user.mention), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "about":
-        buttons = [[
-            InlineKeyboardButton('🤖 Updates', url='https://t.me/TeamEvamaria'),
-            InlineKeyboardButton('♥️ Source', callback_data='source')
-        ], [
-            InlineKeyboardButton('🏠 Home', callback_data='start'),
-            InlineKeyboardButton('🔐 Close', callback_data='close_data')
-        ]]
+        buttons = [
+            [InlineKeyboardButton('🤖 Updates', url='https://t.me/TeamEvamaria'), InlineKeyboardButton('♥️ Source', callback_data='source')],
+            [InlineKeyboardButton('🏠 Home', callback_data='start'), InlineKeyboardButton('🔐 Close', callback_data='close_data')]
+        ]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.ABOUT_TXT.format(temp.B_NAME),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.ABOUT_TXT.format(temp.B_NAME), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "source":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='about')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='about')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.SOURCE_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.SOURCE_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "manuelfilter":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'),
-            InlineKeyboardButton('⏹️ Buttons', callback_data='button')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('⏹️ Buttons', callback_data='button')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.MANUELFILTER_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.MANUELFILTER_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "button":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='manuelfilter')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='manuelfilter')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.BUTTON_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.BUTTON_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "autofilter":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.AUTOFILTER_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.AUTOFILTER_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "coct":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.CONNECTION_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.CONNECTION_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "extra":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'),
-            InlineKeyboardButton('👮\u200d♂️ Admin', callback_data='admin')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('👮\u200d♂️ Admin', callback_data='admin')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.EXTRAMOD_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.EXTRAMOD_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "admin":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='extra')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='extra')]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.ADMIN_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.ADMIN_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "stats":
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'),
-            InlineKeyboardButton('♻️', callback_data='rfrsh')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('♻️', callback_data='rfrsh')]]
         reply_markup = InlineKeyboardMarkup(buttons)
         total = await Media.count_documents()
         users = await db.total_users_count()
@@ -693,18 +568,11 @@ async def cb_handler(client: Client, query: CallbackQuery):
         free = 536870912 - monsize
         monsize = get_size(monsize)
         free = get_size(free)
-        await query.message.edit_text(
-            text=script.STATUS_TXT.format(total, users, chats, monsize, free),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.STATUS_TXT.format(total, users, chats, monsize, free), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "rfrsh":
         await query.answer("Fetching MongoDb DataBase")
-        buttons = [[
-            InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'),
-            InlineKeyboardButton('♻️', callback_data='rfrsh')
-        ]]
+        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('♻️', callback_data='rfrsh')]]
         reply_markup = InlineKeyboardMarkup(buttons)
         total = await Media.count_documents()
         users = await db.total_users_count()
@@ -713,32 +581,22 @@ async def cb_handler(client: Client, query: CallbackQuery):
         free = 536870912 - monsize
         monsize = get_size(monsize)
         free = get_size(free)
-        await query.message.edit_text(
-            text=script.STATUS_TXT.format(total, users, chats, monsize, free),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await query.message.edit_text(text=script.STATUS_TXT.format(total, users, chats, monsize, free), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
 
     await query.answer('Done')
 
 
 async def auto_filter(client, msg, spoll=False):
     message = msg
-    if message.text.startswith("/"): return  # ignore commands
+    if message.text.startswith("/"): return
     if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
         return
     if 2 < len(message.text) < 100:
         search = message.text
-
-        # ── Step 1: Detect language in user's search query ──
         query_lang = detect_query_language(search)
-        # Strip language from search so MongoDB finds more results
         clean_search = strip_language_from_query(search) if query_lang else search
-
-        # ── Step 2: Fetch ALL results (deduplicated + sorted by size desc) ──
         all_files = await get_all_search_results(clean_search.lower())
         if not all_files:
-            # ── Not Found message with Cinema Club branding ──
             req_user = message.from_user.mention if message.from_user else "User"
             not_found_cap = (
                 f"👑 **ASKED BY :** {req_user}\n"
@@ -747,13 +605,8 @@ async def auto_filter(client, msg, spoll=False):
                 f"🔗 [Cinema Club New](https://t.me/cinemaclubnew1)\n\n"
                 f"{script.NOT_FILE_TXT.format(search)}"
             )
-            btn = [[
-                InlineKeyboardButton("⭕ Join Here ⭕", url=SPELL_LNK)
-            ]]
-            n = await message.reply_text(
-                text=not_found_cap,
-                reply_markup=InlineKeyboardMarkup(btn)
-            )
+            btn = [[InlineKeyboardButton("⭕ Join Here ⭕", url=SPELL_LNK)]]
+            n = await message.reply_text(text=not_found_cap, reply_markup=InlineKeyboardMarkup(btn))
             await asyncio.sleep(30)
             await n.delete()
             try:
@@ -764,17 +617,13 @@ async def auto_filter(client, msg, spoll=False):
     else:
         return
 
-    # ── Step 3: Extract features and Store State ──
     from utils_lang import detect_languages, detect_seasons, detect_qualities
 
     lang_groups = detect_languages(all_files)
     all_seasons = detect_seasons(all_files)
     all_qualities = detect_qualities(all_files)
-
-    # Determine initial active lang (if user requested it)
     active_lang = query_lang if (query_lang and query_lang in lang_groups) else None
 
-    # Store state for callbacks
     key = f"{message.chat.id}-{message.id}"
     req = message.from_user.id if message.from_user else 0
 
@@ -790,12 +639,10 @@ async def auto_filter(client, msg, spoll=False):
         'active_quality': None
     }
 
-    # ── Step 4: Build UI via helper ──
     btn, total = build_search_ui(key, req, offset=0)
     if not btn:
         return
 
-    # ── Step 5: Build caption with Cinema Club branding ──
     lang_info = f" ({active_lang})" if active_lang else ""
     req_user = message.from_user.mention if message.from_user else "User"
     cap = (
@@ -806,11 +653,9 @@ async def auto_filter(client, msg, spoll=False):
         f"**Here is What I Found In My Database For Your Query {search}{lang_info}.**"
     )
 
-    # ── Step 6: Send message ──
     dll = await message.reply_text(cap, reply_markup=InlineKeyboardMarkup(btn))
     await asyncio.sleep(60)
     fll = await dll.edit_text(f"<b>🗑️ Filter Deleted After 1 Min ‼️ \n 🔍Search Again !!</b>")
-    # Clean up stored state
     LANG_DATA.pop(key, None)
     await asyncio.sleep(60)
     await fll.delete()
@@ -829,52 +674,30 @@ async def manual_filters(client, message, text=False):
         pattern = r"( |^|[^\w])" + re.escape(keyword) + r"( |$|[^\w])"
         if re.search(pattern, name, flags=re.IGNORECASE):
             reply_text, btn, alert, fileid = await find_filter(group_id, keyword)
-
             if reply_text:
                 reply_text = reply_text.replace("\\n", "\n").replace("\\t", "\t")
-
             if btn is not None:
                 try:
                     if fileid == "None":
                         if btn == "[]":
-                            dm = await client.send_message(
-                                group_id,
-                                reply_text,
-                                disable_web_page_preview=True,
-                                reply_to_message_id=reply_id)
+                            dm = await client.send_message(group_id, reply_text, disable_web_page_preview=True, reply_to_message_id=reply_id)
                             await asyncio.sleep(30)
                             await dm.delete()
                             await message.delete()
                         else:
                             button = eval(btn)
-                            dm = await client.send_message(
-                                group_id,
-                                reply_text,
-                                disable_web_page_preview=True,
-                                reply_markup=InlineKeyboardMarkup(button),
-                                reply_to_message_id=reply_id
-                            )
+                            dm = await client.send_message(group_id, reply_text, disable_web_page_preview=True, reply_markup=InlineKeyboardMarkup(button), reply_to_message_id=reply_id)
                             await asyncio.sleep(30)
                             await dm.delete()
                             await message.delete()
                     elif btn == "[]":
-                        dm = await client.send_cached_media(
-                            group_id,
-                            fileid,
-                            caption=reply_text or "",
-                            reply_to_message_id=reply_id
-                        )
+                        dm = await client.send_cached_media(group_id, fileid, caption=reply_text or "", reply_to_message_id=reply_id)
                         await asyncio.sleep(30)
                         await dm.delete()
                         await message.delete()
                     else:
                         button = eval(btn)
-                        dm = await message.reply_cached_media(
-                            fileid,
-                            caption=reply_text or "",
-                            reply_markup=InlineKeyboardMarkup(button),
-                            reply_to_message_id=reply_id
-                        )
+                        dm = await message.reply_cached_media(fileid, caption=reply_text or "", reply_markup=InlineKeyboardMarkup(button), reply_to_message_id=reply_id)
                         await asyncio.sleep(30)
                         await dm.delete()
                         await message.delete()
