@@ -129,6 +129,7 @@ async def start(client, message):
         sts = await message.reply(f"Sending {len(page_files)} files to you...")
 
         async def send_batch():
+            from plugins.stats import record_search, record_download
             for f in page_files:
                 file_id, file_ref = f.file_id, getattr(f, 'file_ref', None)
                 f_caption = getattr(f, 'caption', '') or ''
@@ -148,6 +149,8 @@ async def start(client, message):
                     f_caption = f"{f.file_name}"
                 try:
                     await client.send_cached_media(chat_id=chat_id, file_id=file_id, caption=f_caption, protect_content=True)
+                    await record_search(chat_id, f.file_name or "unknown")
+                    await record_download(chat_id)
                 except FloodWait as e:
                     await asyncio.sleep(e.value + 1)
                     await client.send_cached_media(chat_id=chat_id, file_id=file_id, caption=f_caption, protect_content=True)
@@ -281,6 +284,9 @@ async def start(client, message):
         caption=f_caption,
         protect_content=True if pre == 'filep' else False,
     )
+    from plugins.stats import record_search, record_download
+    asyncio.create_task(record_search(message.from_user.id, title or "unknown"))
+    asyncio.create_task(record_download(message.from_user.id))
     await client.send_message(
         LOG_CHANNEL,
         f"#FILE_SENT\n"
