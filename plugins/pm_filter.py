@@ -14,11 +14,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerId
 from utils import get_size, is_subscribed, temp
 from database.users_chats_db import db
 from database.ia_filterdb import Media, get_file_details, get_search_results, get_all_search_results
-from database.filters_mdb import (
-    del_all,
-    find_filter,
-    get_filters,
-)
+from database.filters_mdb import del_all, find_filter, get_filters
 from utils_lang import detect_languages, detect_query_language, strip_language_from_query
 import logging
 
@@ -26,7 +22,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
 BUTTONS = {}
-LANG_DATA = {}  # Stores language-grouped files per message: key -> {search, all_files, lang_groups, query_lang}
+LANG_DATA = {}
 
 
 def build_search_ui(key, req, offset=0):
@@ -41,17 +37,13 @@ def build_search_ui(key, req, offset=0):
     all_seasons = data.get('all_seasons', [])
     all_qualities = data.get('all_qualities', [])
     all_files = data.get('all_files', [])
-    search = data.get('search', '')
 
     display_files = all_files.copy()
-
     if active_lang and active_lang in lang_groups:
         display_files = [f for f in display_files if f in lang_groups[active_lang]]
-
     if active_season:
         season_int = int(active_season.replace("S", ""))
         display_files = [f for f in display_files if getattr(f, 'season_num', None) == season_int]
-
     if active_quality:
         quality_patterns = {
             '4K': r'(?i)\b(?:4k|2160p)\b',
@@ -66,7 +58,6 @@ def build_search_ui(key, req, offset=0):
 
     total = len(display_files)
     page_files = display_files[offset:offset + 10]
-
     btn = []
 
     if total > 0 and all_seasons:
@@ -103,17 +94,14 @@ def build_search_ui(key, req, offset=0):
             btn.append(qual_btns[i:i + 3])
 
     for file in page_files:
-        btn.append([
-            InlineKeyboardButton(
-                text=f"📂 [{get_size(file.file_size)}] 👉 {file.file_name}",
-                callback_data=f'filep#{file.file_id}'
-            )
-        ])
+        btn.append([InlineKeyboardButton(
+            text=f"📂 [{get_size(file.file_size)}] 👉 {file.file_name}",
+            callback_data=f'filep#{file.file_id}'
+        )])
 
     if total > 0:
         n_offset = offset + 10 if offset + 10 < total else 0
         off_set = 0 if 0 < offset <= 10 else (None if offset == 0 else offset - 10)
-
         total_pages = math.ceil(total / 10)
         current_page = math.ceil(offset / 10) + 1
 
@@ -140,6 +128,28 @@ def build_search_ui(key, req, offset=0):
     return btn, total
 
 
+def get_start_markup():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('➕ Add Me As Admin 👉 Groups ➕', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
+        [
+            InlineKeyboardButton('🎬 Movie Search...', url='https://t.me/+AngJ8lGmH4wwNWY1'),
+            InlineKeyboardButton('📢 Movie Updates', url='https://t.me/ccllinks')
+        ],
+        [InlineKeyboardButton('📖 How to Use', callback_data='howtouse')]
+    ])
+
+
+async def safe_edit(query, text, markup):
+    """Try edit_caption (photo msg), fallback to edit_text, then reply."""
+    try:
+        await query.message.edit_caption(caption=text, reply_markup=markup, parse_mode=enums.ParseMode.HTML)
+    except Exception:
+        try:
+            await query.message.edit_text(text=text, reply_markup=markup, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+        except Exception:
+            await query.message.reply_text(text=text, reply_markup=markup, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+
+
 @Client.on_message((filters.group | filters.private) & filters.text & filters.incoming)
 async def give_filter(client, message):
     k = await manual_filters(client, message)
@@ -156,11 +166,9 @@ async def next_page(bot, query):
         offset = int(offset)
     except:
         offset = 0
-
     btn, total = build_search_ui(key, req, offset=offset)
     if not btn:
         return await query.answer("Session expired! Please search again.", show_alert=True)
-
     try:
         await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
@@ -177,18 +185,13 @@ async def lang_filter(bot, query):
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
     req = query.from_user.id
-    if selected_lang == "ALL" or selected_lang == data.get('active_lang'):
-        data['active_lang'] = None
-    else:
-        data['active_lang'] = selected_lang
+    data['active_lang'] = None if (selected_lang == "ALL" or selected_lang == data.get('active_lang')) else selected_lang
     btn, total = build_search_ui(key, req, offset=0)
     if btn:
         try:
             await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
-        except MessageNotModified:
+        except (MessageNotModified, FloodWait):
             pass
-        except FloodWait as e:
-            return await query.answer(f"Please wait {e.value} seconds...", show_alert=True)
     await query.answer()
 
 
@@ -199,18 +202,13 @@ async def season_filter(bot, query):
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
     req = query.from_user.id
-    if selected_season == "ALL" or selected_season == data.get('active_season'):
-        data['active_season'] = None
-    else:
-        data['active_season'] = selected_season
+    data['active_season'] = None if (selected_season == "ALL" or selected_season == data.get('active_season')) else selected_season
     btn, total = build_search_ui(key, req, offset=0)
     if btn:
         try:
             await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
-        except MessageNotModified:
+        except (MessageNotModified, FloodWait):
             pass
-        except FloodWait as e:
-            return await query.answer(f"Please wait {e.value} seconds...", show_alert=True)
     await query.answer()
 
 
@@ -221,18 +219,13 @@ async def quality_filter(bot, query):
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
     req = query.from_user.id
-    if selected_quality == "ALL" or selected_quality == data.get('active_quality'):
-        data['active_quality'] = None
-    else:
-        data['active_quality'] = selected_quality
+    data['active_quality'] = None if (selected_quality == "ALL" or selected_quality == data.get('active_quality')) else selected_quality
     btn, total = build_search_ui(key, req, offset=0)
     if btn:
         try:
             await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
-        except MessageNotModified:
+        except (MessageNotModified, FloodWait):
             pass
-        except FloodWait as e:
-            return await query.answer(f"Please wait {e.value} seconds...", show_alert=True)
     await query.answer()
 
 
@@ -241,41 +234,28 @@ async def send_all_files(bot, query):
     _, req, key, offset = query.data.split("_")
     if int(req) not in [query.from_user.id, 0]:
         return await query.answer("You cannot interact with this menu.", show_alert=True)
-    data = LANG_DATA.get(key)
-    if not data:
+    if not LANG_DATA.get(key):
         return await query.answer("Session expired! Please search again.", show_alert=True)
     await query.answer(url=f"https://t.me/{temp.U_NAME}?start=all_batch_{key}_{offset}")
 
 
 @Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
+
     if query.data == "close_data":
         await query.message.delete()
 
     elif query.data == "howtouse":
-        # ── FIXED: use reply_text as fallback if edit fails (e.g. message has photo) ──
-        buttons = [[InlineKeyboardButton('🏠 Home', callback_data='start')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        try:
-            await query.message.edit_text(
-                text=script.HOW_TO_USE_TXT,
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML,
-                disable_web_page_preview=True
-            )
-        except Exception:
-            await query.message.reply_text(
-                text=script.HOW_TO_USE_TXT,
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML,
-                disable_web_page_preview=True
-            )
+        await safe_edit(query, script.HOW_TO_USE_TXT, InlineKeyboardMarkup([[InlineKeyboardButton('🏠 Home', callback_data='start')]]))
+        return await query.answer('Done')
+
+    elif query.data == "start":
+        await safe_edit(query, script.START_TXT.format(query.from_user.mention, temp.U_NAME, temp.B_NAME), get_start_markup())
         return await query.answer('Done')
 
     elif query.data == "delallconfirm":
         userid = query.from_user.id
         chat_type = query.message.chat.type
-
         if chat_type == enums.ChatType.PRIVATE:
             grpid = await active_connection(str(userid))
             if grpid is not None:
@@ -284,21 +264,16 @@ async def cb_handler(client: Client, query: CallbackQuery):
                     chat = await client.get_chat(grpid)
                     title = chat.title
                 except:
-                    await query.message.edit_text("Make sure I'm present in your group!!", quote=True)
+                    await query.message.edit_text("Make sure I'm present in your group!!")
                     return await query.answer('Done')
             else:
-                await query.message.edit_text(
-                    "I'm not connected to any groups!\nCheck /connections or connect to any groups",
-                    quote=True
-                )
+                await query.message.edit_text("I'm not connected to any groups!\nCheck /connections or connect to any groups")
                 return await query.answer('Done')
-
         elif chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
             grp_id = query.message.chat.id
             title = query.message.chat.title
         else:
             return await query.answer('Done')
-
         st = await client.get_chat_member(grp_id, userid)
         if (st.status == enums.ChatMemberStatus.OWNER) or (str(userid) in ADMINS):
             await del_all(query.message, grp_id, title)
@@ -328,61 +303,35 @@ async def cb_handler(client: Client, query: CallbackQuery):
         group_id = query.data.split(":")[1]
         act = query.data.split(":")[2]
         hr = await client.get_chat(int(group_id))
-        title = hr.title
-        user_id = query.from_user.id
-        if act == "":
-            stat = "CONNECT"
-            cb = "connectcb"
-        else:
-            stat = "DISCONNECT"
-            cb = "disconnect"
+        stat, cb = ("DISCONNECT", "disconnect") if act else ("CONNECT", "connectcb")
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"{stat}", callback_data=f"{cb}:{group_id}"),
-             InlineKeyboardButton("DELETE", callback_data=f"deletecb:{group_id}")],
+            [InlineKeyboardButton(f"{stat}", callback_data=f"{cb}:{group_id}"), InlineKeyboardButton("DELETE", callback_data=f"deletecb:{group_id}")],
             [InlineKeyboardButton("BACK", callback_data="backcb")]
         ])
-        await query.message.edit_text(
-            f"Group Name : **{title}**\nGroup ID : `{group_id}`",
-            reply_markup=keyboard,
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
+        await query.message.edit_text(f"Group Name : **{hr.title}**\nGroup ID : `{group_id}`", reply_markup=keyboard, parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
 
     elif "connectcb" in query.data:
         await query.answer()
         group_id = query.data.split(":")[1]
         hr = await client.get_chat(int(group_id))
-        title = hr.title
-        user_id = query.from_user.id
-        mkact = await make_active(str(user_id), str(group_id))
-        if mkact:
-            await query.message.edit_text(f"Connected to **{title}**", parse_mode=enums.ParseMode.MARKDOWN)
-        else:
-            await query.message.edit_text('Some error occurred!!', parse_mode=enums.ParseMode.MARKDOWN)
+        mkact = await make_active(str(query.from_user.id), str(group_id))
+        await query.message.edit_text(f"Connected to **{hr.title}**" if mkact else 'Some error occurred!!', parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
 
     elif "disconnect" in query.data:
         await query.answer()
         group_id = query.data.split(":")[1]
         hr = await client.get_chat(int(group_id))
-        title = hr.title
-        user_id = query.from_user.id
-        mkinact = await make_inactive(str(user_id))
-        if mkinact:
-            await query.message.edit_text(f"Disconnected from **{title}**", parse_mode=enums.ParseMode.MARKDOWN)
-        else:
-            await query.message.edit_text(f"Some error occurred!!", parse_mode=enums.ParseMode.MARKDOWN)
+        mkinact = await make_inactive(str(query.from_user.id))
+        await query.message.edit_text(f"Disconnected from **{hr.title}**" if mkinact else "Some error occurred!!", parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
 
     elif "deletecb" in query.data:
         await query.answer()
-        user_id = query.from_user.id
         group_id = query.data.split(":")[1]
-        delcon = await delete_connection(str(user_id), str(group_id))
-        if delcon:
-            await query.message.edit_text("Successfully deleted connection")
-        else:
-            await query.message.edit_text(f"Some error occurred!!", parse_mode=enums.ParseMode.MARKDOWN)
+        delcon = await delete_connection(str(query.from_user.id), str(group_id))
+        await query.message.edit_text("Successfully deleted connection" if delcon else "Some error occurred!!", parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
 
     elif query.data == "backcb":
@@ -396,10 +345,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
         for groupid in groupids:
             try:
                 ttl = await client.get_chat(int(groupid))
-                title = ttl.title
                 active = await if_active(str(userid), str(groupid))
                 act = " - ACTIVE" if active else ""
-                buttons.append([InlineKeyboardButton(text=f"{title}{act}", callback_data=f"groupcb:{groupid}:{act}")])
+                buttons.append([InlineKeyboardButton(text=f"{ttl.title}{act}", callback_data=f"groupcb:{groupid}:{act}")])
             except:
                 pass
         if buttons:
@@ -412,30 +360,13 @@ async def cb_handler(client: Client, query: CallbackQuery):
         reply_text, btn, alerts, fileid = await find_filter(grp_id, keyword)
         if alerts is not None:
             alerts = ast.literal_eval(alerts)
-            alert = alerts[int(i)]
-            alert = alert.replace("\\n", "\n").replace("\\t", "\t")
+            alert = alerts[int(i)].replace("\\n", "\n").replace("\\t", "\t")
             await query.answer(alert, show_alert=True)
 
     if query.data.startswith("file"):
         ident, file_id = query.data.split("#")
-        files_ = await get_file_details(file_id)
-        if not files_:
+        if not await get_file_details(file_id):
             return await query.answer('No such file exist.')
-        files = files_[0]
-        title = files.file_name
-        size = get_size(files.file_size)
-        f_caption = files.caption
-        if CUSTOM_FILE_CAPTION:
-            try:
-                f_caption = CUSTOM_FILE_CAPTION.format(
-                    file_name='' if title is None else title,
-                    file_size='' if size is None else size,
-                    file_caption='' if f_caption is None else f_caption
-                )
-            except Exception as e:
-                logger.exception(e)
-        if f_caption is None:
-            f_caption = f"{files.file_name}"
         try:
             await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
         except UserIsBlocked:
@@ -458,53 +389,17 @@ async def cb_handler(client: Client, query: CallbackQuery):
         f_caption = files.caption
         if CUSTOM_FILE_CAPTION:
             try:
-                f_caption = CUSTOM_FILE_CAPTION.format(
-                    file_name='' if title is None else title,
-                    file_size='' if size is None else size,
-                    file_caption='' if f_caption is None else f_caption
-                )
+                f_caption = CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title, file_size='' if size is None else size, file_caption='' if f_caption is None else f_caption)
             except Exception as e:
                 logger.exception(e)
         if f_caption is None:
             f_caption = f"{title}"
         await query.answer()
-        await client.send_cached_media(
-            chat_id=query.from_user.id,
-            file_id=file_id,
-            caption=f_caption,
-            protect_content=True if ident == 'checksubp' else False
-        )
+        await client.send_cached_media(chat_id=query.from_user.id, file_id=file_id, caption=f_caption, protect_content=True if ident == 'checksubp' else False)
         return
 
     elif query.data == "pages":
-        await query.answer()
-        return
-
-    elif query.data == "start":
-        buttons = [
-            [InlineKeyboardButton('➕ Add Me As Admin 👉 Groups ➕', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
-            [
-                InlineKeyboardButton('🎬 Movie Search...', url='https://t.me/+AngJ8lGmH4wwNWY1'),
-                InlineKeyboardButton('📢 Movie Updates', url='https://t.me/ccllinks')
-            ],
-            [InlineKeyboardButton('📖 How to Use', callback_data='howtouse')]
-        ]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        try:
-            await query.message.edit_text(
-                text=script.START_TXT.format(query.from_user.mention, temp.U_NAME, temp.B_NAME),
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML,
-                disable_web_page_preview=True
-            )
-        except Exception:
-            await query.message.reply_text(
-                text=script.START_TXT.format(query.from_user.mention, temp.U_NAME, temp.B_NAME),
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML,
-                disable_web_page_preview=True
-            )
-        return await query.answer('Done')
+        return await query.answer()
 
     elif query.data == "help":
         buttons = [
@@ -512,76 +407,46 @@ async def cb_handler(client: Client, query: CallbackQuery):
             [InlineKeyboardButton('Connection', callback_data='coct'), InlineKeyboardButton('Extra Mods', callback_data='extra')],
             [InlineKeyboardButton('🏠 Home', callback_data='start'), InlineKeyboardButton('🔮 Status', callback_data='stats')]
         ]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.HELP_TXT.format(query.from_user.mention), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.HELP_TXT.format(query.from_user.mention), reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "about":
         buttons = [
             [InlineKeyboardButton('🤖 Updates', url='https://t.me/TeamEvamaria'), InlineKeyboardButton('♥️ Source', callback_data='source')],
             [InlineKeyboardButton('🏠 Home', callback_data='start'), InlineKeyboardButton('🔐 Close', callback_data='close_data')]
         ]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.ABOUT_TXT.format(temp.B_NAME), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.ABOUT_TXT.format(temp.B_NAME), reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "source":
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='about')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.SOURCE_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.SOURCE_TXT, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='about')]]), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "manuelfilter":
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('⏹️ Buttons', callback_data='button')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.MANUELFILTER_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.MANUELFILTER_TXT, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('⏹️ Buttons', callback_data='button')]]), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "button":
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='manuelfilter')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.BUTTON_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.BUTTON_TXT, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='manuelfilter')]]), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "autofilter":
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.AUTOFILTER_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.AUTOFILTER_TXT, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')]]), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "coct":
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.CONNECTION_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.CONNECTION_TXT, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')]]), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "extra":
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('👮\u200d♂️ Admin', callback_data='admin')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.EXTRAMOD_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.EXTRAMOD_TXT, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('👮\u200d♂️ Admin', callback_data='admin')]]), parse_mode=enums.ParseMode.HTML)
 
     elif query.data == "admin":
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='extra')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text=script.ADMIN_TXT, reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.ADMIN_TXT, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='extra')]]), parse_mode=enums.ParseMode.HTML)
 
-    elif query.data == "stats":
+    elif query.data in ("stats", "rfrsh"):
+        if query.data == "rfrsh":
+            await query.answer("Fetching MongoDb DataBase")
         buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('♻️', callback_data='rfrsh')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
         total = await Media.count_documents()
         users = await db.total_users_count()
         chats = await db.total_chat_count()
         monsize = await db.get_db_size()
         free = 536870912 - monsize
-        monsize = get_size(monsize)
-        free = get_size(free)
-        await query.message.edit_text(text=script.STATUS_TXT.format(total, users, chats, monsize, free), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
-
-    elif query.data == "rfrsh":
-        await query.answer("Fetching MongoDb DataBase")
-        buttons = [[InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'), InlineKeyboardButton('♻️', callback_data='rfrsh')]]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        total = await Media.count_documents()
-        users = await db.total_users_count()
-        chats = await db.total_chat_count()
-        monsize = await db.get_db_size()
-        free = 536870912 - monsize
-        monsize = get_size(monsize)
-        free = get_size(free)
-        await query.message.edit_text(text=script.STATUS_TXT.format(total, users, chats, monsize, free), reply_markup=reply_markup, parse_mode=enums.ParseMode.HTML)
+        await query.message.edit_text(text=script.STATUS_TXT.format(total, users, chats, get_size(monsize), get_size(free)), reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
 
     await query.answer('Done')
 
@@ -605,8 +470,7 @@ async def auto_filter(client, msg, spoll=False):
                 f"🔗 [Cinema Club New](https://t.me/cinemaclubnew1)\n\n"
                 f"{script.NOT_FILE_TXT.format(search)}"
             )
-            btn = [[InlineKeyboardButton("⭕ Join Here ⭕", url=SPELL_LNK)]]
-            n = await message.reply_text(text=not_found_cap, reply_markup=InlineKeyboardMarkup(btn))
+            n = await message.reply_text(text=not_found_cap, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⭕ Join Here ⭕", url=SPELL_LNK)]]))
             await asyncio.sleep(30)
             await n.delete()
             try:
@@ -618,7 +482,6 @@ async def auto_filter(client, msg, spoll=False):
         return
 
     from utils_lang import detect_languages, detect_seasons, detect_qualities
-
     lang_groups = detect_languages(all_files)
     all_seasons = detect_seasons(all_files)
     all_qualities = detect_qualities(all_files)
@@ -628,15 +491,10 @@ async def auto_filter(client, msg, spoll=False):
     req = message.from_user.id if message.from_user else 0
 
     LANG_DATA[key] = {
-        'search': search,
-        'all_files': all_files,
-        'lang_groups': lang_groups,
-        'all_seasons': all_seasons,
-        'all_qualities': all_qualities,
-        'query_lang': query_lang,
-        'active_lang': active_lang,
-        'active_season': None,
-        'active_quality': None
+        'search': search, 'all_files': all_files, 'lang_groups': lang_groups,
+        'all_seasons': all_seasons, 'all_qualities': all_qualities,
+        'query_lang': query_lang, 'active_lang': active_lang,
+        'active_season': None, 'active_quality': None
     }
 
     btn, total = build_search_ui(key, req, offset=0)
@@ -681,26 +539,15 @@ async def manual_filters(client, message, text=False):
                     if fileid == "None":
                         if btn == "[]":
                             dm = await client.send_message(group_id, reply_text, disable_web_page_preview=True, reply_to_message_id=reply_id)
-                            await asyncio.sleep(30)
-                            await dm.delete()
-                            await message.delete()
                         else:
-                            button = eval(btn)
-                            dm = await client.send_message(group_id, reply_text, disable_web_page_preview=True, reply_markup=InlineKeyboardMarkup(button), reply_to_message_id=reply_id)
-                            await asyncio.sleep(30)
-                            await dm.delete()
-                            await message.delete()
+                            dm = await client.send_message(group_id, reply_text, disable_web_page_preview=True, reply_markup=InlineKeyboardMarkup(eval(btn)), reply_to_message_id=reply_id)
                     elif btn == "[]":
                         dm = await client.send_cached_media(group_id, fileid, caption=reply_text or "", reply_to_message_id=reply_id)
-                        await asyncio.sleep(30)
-                        await dm.delete()
-                        await message.delete()
                     else:
-                        button = eval(btn)
-                        dm = await message.reply_cached_media(fileid, caption=reply_text or "", reply_markup=InlineKeyboardMarkup(button), reply_to_message_id=reply_id)
-                        await asyncio.sleep(30)
-                        await dm.delete()
-                        await message.delete()
+                        dm = await message.reply_cached_media(fileid, caption=reply_text or "", reply_markup=InlineKeyboardMarkup(eval(btn)), reply_to_message_id=reply_id)
+                    await asyncio.sleep(30)
+                    await dm.delete()
+                    await message.delete()
                 except Exception as e:
                     logger.exception(e)
                 break
