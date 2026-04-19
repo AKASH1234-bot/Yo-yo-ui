@@ -49,10 +49,10 @@ def build_search_ui(key, req, offset=0):
 
     # ── 1. Apply Intersecting Filters ──
     display_files = all_files.copy()
-    
+
     if active_lang and active_lang in lang_groups:
         display_files = [f for f in display_files if f in lang_groups[active_lang]]
-        
+
     if active_season:
         season_int = int(active_season.replace("S", ""))
         display_files = [f for f in display_files if getattr(f, 'season_num', None) == season_int]
@@ -71,7 +71,7 @@ def build_search_ui(key, req, offset=0):
 
     total = len(display_files)
     page_files = display_files[offset:offset + 10]
-    
+
     # ── 2. Build Buttons ──
     btn = []
 
@@ -100,7 +100,7 @@ def build_search_ui(key, req, offset=0):
                 season_btns.append(InlineKeyboardButton(f"{s_label}", callback_data=f"season_{key}_{s_label}"))
         for i in range(0, len(season_btns), 4):
             btn.append(season_btns[i:i + 4])
-            
+
     # Quality Grid
     if all_qualities:
         qual_btns = []
@@ -125,7 +125,7 @@ def build_search_ui(key, req, offset=0):
     if total > 0:
         n_offset = offset + 10 if offset + 10 < total else 0
         off_set = 0 if 0 < offset <= 10 else (None if offset == 0 else offset - 10)
-        
+
         total_pages = math.ceil(total / 10)
         current_page = math.ceil(offset / 10) + 1
 
@@ -188,13 +188,13 @@ async def next_page(bot, query):
 async def lang_filter(bot, query):
     """Handle language filter button clicks."""
     _, key, selected_lang = query.data.split("_", 2)
-    
+
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
 
     req = query.from_user.id
-    
+
     if selected_lang == "ALL" or selected_lang == data.get('active_lang'):
         data['active_lang'] = None
     else:
@@ -215,13 +215,13 @@ async def lang_filter(bot, query):
 async def season_filter(bot, query):
     """Handle season filter button clicks."""
     _, key, selected_season = query.data.split("_", 2)
-    
+
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
 
     req = query.from_user.id
-    
+
     if selected_season == "ALL" or selected_season == data.get('active_season'):
         data['active_season'] = None
     else:
@@ -242,13 +242,13 @@ async def season_filter(bot, query):
 async def quality_filter(bot, query):
     """Handle quality filter button clicks."""
     _, key, selected_quality = query.data.split("_", 2)
-    
+
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
 
     req = query.from_user.id
-    
+
     if selected_quality == "ALL" or selected_quality == data.get('active_quality'):
         data['active_quality'] = None
     else:
@@ -272,14 +272,14 @@ async def send_all_files(bot, query):
     Redirects to PM with Deep-Link to trigger ForceSub join request logic.
     """
     _, req, key, offset = query.data.split("_")
-    
+
     if int(req) not in [query.from_user.id, 0]:
         return await query.answer("You cannot interact with this menu.", show_alert=True)
-        
+
     data = LANG_DATA.get(key)
     if not data:
         return await query.answer("Session expired! Please search again.", show_alert=True)
-        
+
     await query.answer(url=f"https://t.me/{temp.U_NAME}?start=all_batch_{key}_{offset}")
 
 
@@ -287,6 +287,20 @@ async def send_all_files(bot, query):
 async def cb_handler(client: Client, query: CallbackQuery):
     if query.data == "close_data":
         await query.message.delete()
+
+    elif query.data == "howtouse":
+        # ── How To Use page ──
+        buttons = [[
+            InlineKeyboardButton('🏠 Home', callback_data='start')
+        ]]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        await query.message.edit_text(
+            text=script.HOW_TO_USE_TXT,
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML
+        )
+        return await query.answer('Done')
+
     elif query.data == "delallconfirm":
         userid = query.from_user.id
         chat_type = query.message.chat.type
@@ -320,6 +334,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             await del_all(query.message, grp_id, title)
         else:
             await query.answer("You need to be Group Owner or an Auth User to do that!", show_alert=True)
+
     elif query.data == "delallcancel":
         userid = query.from_user.id
         chat_type = query.message.chat.type
@@ -339,9 +354,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
                     pass
             else:
                 await query.answer("That's not for you!!", show_alert=True)
+
     elif "groupcb" in query.data:
         await query.answer()
-
         group_id = query.data.split(":")[1]
         act = query.data.split(":")[2]
         hr = await client.get_chat(int(group_id))
@@ -360,16 +375,15 @@ async def cb_handler(client: Client, query: CallbackQuery):
              InlineKeyboardButton("DELETE", callback_data=f"deletecb:{group_id}")],
             [InlineKeyboardButton("BACK", callback_data="backcb")]
         ])
-
         await query.message.edit_text(
             f"Group Name : **{title}**\nGroup ID : `{group_id}`",
             reply_markup=keyboard,
             parse_mode=enums.ParseMode.MARKDOWN
         )
         return await query.answer('Done')
+
     elif "connectcb" in query.data:
         await query.answer()
-
         group_id = query.data.split(":")[1]
         hr = await client.get_chat(int(group_id))
         title = hr.title
@@ -384,9 +398,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
         else:
             await query.message.edit_text('Some error occurred!!', parse_mode=enums.ParseMode.MARKDOWN)
         return await query.answer('Done')
+
     elif "disconnect" in query.data:
         await query.answer()
-
         group_id = query.data.split(":")[1]
         hr = await client.get_chat(int(group_id))
         title = hr.title
@@ -404,9 +418,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 parse_mode=enums.ParseMode.MARKDOWN
             )
         return await query.answer('Done')
+
     elif "deletecb" in query.data:
         await query.answer()
-
         user_id = query.from_user.id
         group_id = query.data.split(":")[1]
         delcon = await delete_connection(str(user_id), str(group_id))
@@ -419,9 +433,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 parse_mode=enums.ParseMode.MARKDOWN
             )
         return await query.answer('Done')
+
     elif query.data == "backcb":
         await query.answer()
-
         userid = query.from_user.id
         groupids = await all_connections(str(userid))
         if groupids is None:
@@ -450,6 +464,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 "Your connected group details ;\n\n",
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
+
     elif "alertmessage" in query.data:
         grp_id = query.message.chat.id
         i = query.data.split(":")[1]
@@ -460,6 +475,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             alert = alerts[int(i)]
             alert = alert.replace("\\n", "\n").replace("\\t", "\t")
             await query.answer(alert, show_alert=True)
+
     if query.data.startswith("file"):
         ident, file_id = query.data.split("#")
         files_ = await get_file_details(file_id)
@@ -523,15 +539,26 @@ async def cb_handler(client: Client, query: CallbackQuery):
             caption=f_caption,
             protect_content=True if ident == 'checksubp' else False
         )
+
     elif query.data == "pages":
         await query.answer()
+
     elif query.data == "start":
-        buttons = [[
-            InlineKeyboardButton('➕ Add Me To Your Groups ➕', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
-        ], [
-            InlineKeyboardButton('Movie Search Group', url='https://t.me/MVM_Links'),
-            InlineKeyboardButton('Movie Updates', url='https://t.me/+6Mb-6zj2Gh0xYjhl')
-        ],
+        # ── Updated Start Buttons matching screenshot ──
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    '➕ Add Me As Admin 👉 Groups ➕',
+                    url=f'http://t.me/{temp.U_NAME}?startgroup=true'
+                )
+            ],
+            [
+                InlineKeyboardButton('🎬 Movie Search...', url='https://t.me/+AngJ8lGmH4wwNWY1'),
+                InlineKeyboardButton('📢 Movie Updates', url='https://t.me/ccllinks')
+            ],
+            [
+                InlineKeyboardButton('📖 How to Use', callback_data='howtouse')
+            ]
         ]
         reply_markup = InlineKeyboardMarkup(buttons)
         await query.message.edit_text(
@@ -540,6 +567,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             parse_mode=enums.ParseMode.HTML
         )
         await query.answer('Done')
+
     elif query.data == "help":
         buttons = [[
             InlineKeyboardButton('Manual Filter', callback_data='manuelfilter'),
@@ -557,6 +585,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "about":
         buttons = [[
             InlineKeyboardButton('🤖 Updates', url='https://t.me/TeamEvamaria'),
@@ -571,6 +600,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "source":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='about')
@@ -581,6 +611,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "manuelfilter":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'),
@@ -592,6 +623,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "button":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='manuelfilter')
@@ -602,6 +634,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "autofilter":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')
@@ -612,6 +645,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "coct":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help')
@@ -622,6 +656,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "extra":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'),
@@ -633,6 +668,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "admin":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='extra')
@@ -643,6 +679,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "stats":
         buttons = [[
             InlineKeyboardButton('👩\u200d🦯 Back', callback_data='help'),
@@ -661,6 +698,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     elif query.data == "rfrsh":
         await query.answer("Fetching MongoDb DataBase")
         buttons = [[
@@ -680,6 +718,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
     await query.answer('Done')
 
 
