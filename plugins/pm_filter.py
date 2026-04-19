@@ -395,7 +395,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
             f_caption = f"{title}"
         await query.answer()
         await client.send_cached_media(chat_id=query.from_user.id, file_id=file_id, caption=f_caption, protect_content=True if ident == 'checksubp' else False)
-        asyncio.create_task(__import__('plugins.stats', fromlist=['record_download']).record_download(query.from_user.id))
+        from plugins.stats import record_search, record_download
+        asyncio.create_task(record_search(query.from_user.id, files.file_name or "unknown"))
+        asyncio.create_task(record_download(query.from_user.id))
         return
 
     elif query.data == "pages":
