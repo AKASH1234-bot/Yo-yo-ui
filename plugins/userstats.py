@@ -1,43 +1,46 @@
 # plugins/userstats.py
-# Admin command: /users - shows new users today, this week, this month
-
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from database.users_chats_db import db
 from info import ADMINS
 
 @Client.on_message(filters.command("users") & filters.user(ADMINS))
 async def user_stats(client: Client, message: Message):
-    now = datetime.utcnow()
-    today     = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    this_week = now - timedelta(days=now.weekday())
-    this_week = this_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now(timezone.utc)
+
+    today      = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    this_week  = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    total      = await db.total_users_count()
 
-    day_count,   day_cursor   = await db.get_users_since(today)
-    week_count,  week_cursor  = await db.get_users_since(this_week)
-    month_count, month_cursor = await db.get_users_since(this_month)
-    total = await db.total_users_count()
+    # Fetch all users with joined_date in each period
+    async def get_users(since):
+        result = []
+        async for u in db.col.find({'joined_date': {'$gte': since}}).sort('joined_date', -1):
+            result.append(u)
+        return result
 
-    # Build today's user list (max 20)
-    day_users = []
-    async for u in day_cursor:
-        if len(day_users) >= 20:
-            break
+    day_users   = await get_users(today)
+    week_users  = await get_users(this_week)
+    month_users = await get_users(this_month)
+
+    # Today's user list (max 20)
+    lines = []
+    for u in day_users[:20]:
         name = u.get('name', 'Unknown')
-        uid  = u.get('id')
-        day_users.append(f"• [{name}](tg://user?id={uid}) `{uid}`")
+        uid  = u.get('id', '')
+        lines.append(f"• [{name}](tg://user?id={uid}) `{uid}`")
 
-    day_list = "\n".join(day_users) if day_users else "None"
+    day_list = "\n".join(lines) if lines else "_None yet_"
 
     text = (
         f"👥 **USER STATISTICS**\n"
         f"──────────────────\n"
         f"📊 **Total Users:** `{total}`\n"
-        f"📅 **Today:** `{day_count}`\n"
-        f"📆 **This Week:** `{week_count}`\n"
-        f"🗓 **This Month:** `{month_count}`\n\n"
+        f"📅 **Today:** `{len(day_users)}`\n"
+        f"📆 **This Week:** `{len(week_users)}`\n"
+        f"🗓 **This Month:** `{len(month_users)}`\n\n"
         f"**Today's New Users:**\n{day_list}"
     )
     await message.reply(text, quote=True)
