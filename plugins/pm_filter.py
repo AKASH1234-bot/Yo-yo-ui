@@ -149,7 +149,7 @@ async def safe_edit(query, text, markup):
             await query.message.reply_text(text=text, reply_markup=markup, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
 
 
-@Client.on_message((filters.group | filters.private) & filters.text & filters.incoming)
+@Client.on_message((filters.group | filters.private) & filters.text & filters.incoming & ~filters.command(["mystats", "history", "trending"]))
 async def give_filter(client, message):
     k = await manual_filters(client, message)
     if k == False:
