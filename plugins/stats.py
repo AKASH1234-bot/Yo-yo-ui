@@ -27,7 +27,6 @@ async def record_search(uid: int, q: str):
         t = json.loads(raw) if raw else {}
         t[q] = t.get(q, 0) + 1
         await set_cache(TK, json.dumps(t), ex=86400)
-        logger.info(f"[stats] recorded search uid={uid} q={q}")
     except Exception as e:
         logger.warning(f"[stats] record_search error: {e}")
 
@@ -37,19 +36,15 @@ async def record_download(uid: int):
         s = json.loads(raw) if raw else {"s": 0, "d": 0}
         s["d"] += 1
         await set_cache(_sk(uid), json.dumps(s), ex=TTL)
-        logger.info(f"[stats] recorded download uid={uid}")
     except Exception as e:
         logger.warning(f"[stats] record_download error: {e}")
 
-@Client.on_message(filters.command("mystats") & filters.private)
+@Client.on_message(filters.command("mystats") & filters.private, group=-1)
 async def mystats_cmd(_, message: Message):
-    uid = message.from_user.id
     try:
-        raw = await get_cache(_sk(uid))
-        logger.info(f"[stats] mystats raw={raw} uid={uid}")
+        raw = await get_cache(_sk(message.from_user.id))
         s = json.loads(raw) if raw else {"s": 0, "d": 0}
-    except Exception as e:
-        logger.warning(f"[stats] mystats error: {e}")
+    except:
         s = {"s": 0, "d": 0}
     await message.reply(
         f"📊 <b>YOUR STATS</b>\n"
@@ -59,7 +54,7 @@ async def mystats_cmd(_, message: Message):
         quote=True
     )
 
-@Client.on_message(filters.command("history") & filters.private)
+@Client.on_message(filters.command("history") & filters.private, group=-1)
 async def history_cmd(_, message: Message):
     try:
         raw = await get_cache(_hk(message.from_user.id))
@@ -71,7 +66,7 @@ async def history_cmd(_, message: Message):
     lines = "\n".join(f"{i+1}. <code>{q}</code>" for i, q in enumerate(h))
     await message.reply(f"🕒 <b>LAST {len(h)} SEARCHES</b>\n──────────────────\n{lines}", quote=True)
 
-@Client.on_message(filters.command("trending") & filters.private)
+@Client.on_message(filters.command("trending") & filters.private, group=-1)
 async def trending_cmd(_, message: Message):
     try:
         raw = await get_cache(TK)
@@ -85,16 +80,15 @@ async def trending_cmd(_, message: Message):
     lines = "\n".join(f"{medals[i]} <code>{q}</code> — <b>{c}</b>" for i,(q,c) in enumerate(top))
     await message.reply(f"🔥 <b>TOP {len(top)} TRENDING</b>\n──────────────────\n{lines}", quote=True)
 
-@Client.on_message(filters.command("testredis") & filters.private)
+@Client.on_message(filters.command("testredis") & filters.private, group=-1)
 async def test_redis(_, message: Message):
-    """Admin debug command to test Redis"""
     uid = message.from_user.id
     try:
         await set_cache(f"test:{uid}", "ok", ex=60)
         val = await get_cache(f"test:{uid}")
         if val == "ok":
-            await message.reply("✅ Redis is working correctly!")
+            await message.reply("✅ Redis working!\nNow get a file from group then check /mystats")
         else:
-            await message.reply(f"⚠️ Redis set but got: {val}")
+            await message.reply(f"⚠️ Redis issue: got {val}")
     except Exception as e:
         await message.reply(f"❌ Redis error: {e}")
