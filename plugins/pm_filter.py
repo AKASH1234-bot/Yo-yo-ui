@@ -140,7 +140,6 @@ def get_start_markup():
 
 
 async def safe_edit(query, text, markup):
-    """Try edit_caption (photo msg), fallback to edit_text, then reply."""
     try:
         await query.message.edit_caption(caption=text, reply_markup=markup, parse_mode=enums.ParseMode.HTML)
     except Exception:
@@ -396,6 +395,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             f_caption = f"{title}"
         await query.answer()
         await client.send_cached_media(chat_id=query.from_user.id, file_id=file_id, caption=f_caption, protect_content=True if ident == 'checksubp' else False)
+        asyncio.create_task(__import__('plugins.stats', fromlist=['record_download']).record_download(query.from_user.id))
         return
 
     elif query.data == "pages":
@@ -458,6 +458,7 @@ async def auto_filter(client, msg, spoll=False):
         return
     if 2 < len(message.text) < 100:
         search = message.text
+        asyncio.create_task(__import__('plugins.stats', fromlist=['record_search']).record_search(message.from_user.id, search))
         query_lang = detect_query_language(search)
         clean_search = strip_language_from_query(search) if query_lang else search
         all_files = await get_all_search_results(clean_search.lower())
