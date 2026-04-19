@@ -281,6 +281,14 @@ async def start(client, message):
         caption=f_caption,
         protect_content=True if pre == 'filep' else False,
     )
+    await client.send_message(
+        LOG_CHANNEL,
+        f"#FILE_SENT\n"
+        f"🤖 **Bot:** @{temp.U_NAME} (`{temp.B_NAME}`)\n"
+        f"👤 **User:** {message.from_user.mention} [`{message.from_user.id}`]\n"
+        f"📄 **File:** `{title}`\n"
+        f"📦 **Size:** {size}"
+    )
 
 
 @Client.on_message(filters.command('channel') & filters.user(ADMINS))
