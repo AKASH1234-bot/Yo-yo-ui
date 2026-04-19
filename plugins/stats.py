@@ -14,32 +14,42 @@ async def record_search(uid: int, q: str):
     q = q.strip().lower()[:80]
     if len(q) < 2: return
     try:
-        s = json.loads(await get_cache(_sk(uid)) or '{"s":0,"d":0}')
+        raw = await get_cache(_sk(uid))
+        s = json.loads(raw) if raw else {"s": 0, "d": 0}
         s["s"] += 1
         await set_cache(_sk(uid), json.dumps(s), ex=TTL)
-        h = json.loads(await get_cache(_hk(uid)) or '[]')
+        raw = await get_cache(_hk(uid))
+        h = json.loads(raw) if raw else []
         if q in h: h.remove(q)
         h.insert(0, q)
         await set_cache(_hk(uid), json.dumps(h[:10]), ex=TTL)
-        t = json.loads(await get_cache(TK) or '{}')
+        raw = await get_cache(TK)
+        t = json.loads(raw) if raw else {}
         t[q] = t.get(q, 0) + 1
         await set_cache(TK, json.dumps(t), ex=86400)
+        logger.info(f"[stats] recorded search uid={uid} q={q}")
     except Exception as e:
-        logger.warning(f"[stats] {e}")
+        logger.warning(f"[stats] record_search error: {e}")
 
 async def record_download(uid: int):
     try:
-        s = json.loads(await get_cache(_sk(uid)) or '{"s":0,"d":0}')
+        raw = await get_cache(_sk(uid))
+        s = json.loads(raw) if raw else {"s": 0, "d": 0}
         s["d"] += 1
         await set_cache(_sk(uid), json.dumps(s), ex=TTL)
+        logger.info(f"[stats] recorded download uid={uid}")
     except Exception as e:
-        logger.warning(f"[stats] {e}")
+        logger.warning(f"[stats] record_download error: {e}")
 
 @Client.on_message(filters.command("mystats") & filters.private)
 async def mystats_cmd(_, message: Message):
+    uid = message.from_user.id
     try:
-        s = json.loads(await get_cache(_sk(message.from_user.id)) or '{"s":0,"d":0}')
-    except:
+        raw = await get_cache(_sk(uid))
+        logger.info(f"[stats] mystats raw={raw} uid={uid}")
+        s = json.loads(raw) if raw else {"s": 0, "d": 0}
+    except Exception as e:
+        logger.warning(f"[stats] mystats error: {e}")
         s = {"s": 0, "d": 0}
     await message.reply(
         f"📊 <b>YOUR STATS</b>\n"
@@ -52,7 +62,8 @@ async def mystats_cmd(_, message: Message):
 @Client.on_message(filters.command("history") & filters.private)
 async def history_cmd(_, message: Message):
     try:
-        h = json.loads(await get_cache(_hk(message.from_user.id)) or '[]')
+        raw = await get_cache(_hk(message.from_user.id))
+        h = json.loads(raw) if raw else []
     except:
         h = []
     if not h:
@@ -63,7 +74,8 @@ async def history_cmd(_, message: Message):
 @Client.on_message(filters.command("trending") & filters.private)
 async def trending_cmd(_, message: Message):
     try:
-        t = json.loads(await get_cache(TK) or '{}')
+        raw = await get_cache(TK)
+        t = json.loads(raw) if raw else {}
     except:
         t = {}
     if not t:
@@ -72,3 +84,17 @@ async def trending_cmd(_, message: Message):
     medals = ["🥇","🥈","🥉"] + ["🔹"]*7
     lines = "\n".join(f"{medals[i]} <code>{q}</code> — <b>{c}</b>" for i,(q,c) in enumerate(top))
     await message.reply(f"🔥 <b>TOP {len(top)} TRENDING</b>\n──────────────────\n{lines}", quote=True)
+
+@Client.on_message(filters.command("testredis") & filters.private)
+async def test_redis(_, message: Message):
+    """Admin debug command to test Redis"""
+    uid = message.from_user.id
+    try:
+        await set_cache(f"test:{uid}", "ok", ex=60)
+        val = await get_cache(f"test:{uid}")
+        if val == "ok":
+            await message.reply("✅ Redis is working correctly!")
+        else:
+            await message.reply(f"⚠️ Redis set but got: {val}")
+    except Exception as e:
+        await message.reply(f"❌ Redis error: {e}")
