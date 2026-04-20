@@ -24,6 +24,13 @@ logger.setLevel(logging.ERROR)
 BUTTONS = {}
 LANG_DATA = {}
 
+ALL_COMMANDS = [
+    "start", "mystats", "history", "trending", "users", "totalrequests",
+    "purgerequests", "stats", "ban", "unban", "logs", "delete", "deleteall",
+    "channel", "broadcast", "leave", "disable", "enable", "chats", "id",
+    "info", "testredis", "help", "about", "settings", "connections",
+    "connect", "disconnect", "filter", "filters", "delall"
+]
 
 def build_search_ui(key, req, offset=0):
     data = LANG_DATA.get(key)
@@ -149,7 +156,7 @@ async def safe_edit(query, text, markup):
             await query.message.reply_text(text=text, reply_markup=markup, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
 
 
-@Client.on_message((filters.group | filters.private) & filters.text & filters.incoming & ~filters.command(["mystats", "history", "trending"]))
+@Client.on_message((filters.group | filters.private) & filters.text & filters.incoming & ~filters.command(ALL_COMMANDS))
 async def give_filter(client, message):
     k = await manual_filters(client, message)
     if k == False:
