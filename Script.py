@@ -170,6 +170,8 @@ Added By - {}
 
     LOG_TEXT_P = """#NewUser
 
+🤖 Bot: @{}
+
 ID - <code>{}</code>
 
 Name - {}
